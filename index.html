@@ -3,12 +3,13 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title><?= title ?></title>
+  <title>基金看板（GitHub版）</title>
+
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 
   <style>
     :root{
-      --bg:#070A14;--line:rgba(255,255,255,.09);
+      --bg:#070A14;--line:rgba(255,255,255,.10);
       --text:#EAF0FF;--muted:#9FB0D0;--pri:#7AA2FF;
       --good:#57D38A;--bad:#FF6B6B;
     }
@@ -46,16 +47,17 @@
     th,td{padding:7px 6px;border-top:1px solid var(--line);text-align:left;vertical-align:middle;white-space:nowrap}
     th{color:var(--muted);font-weight:500;font-size:11px}
     .namecol{min-width:280px;white-space:normal}
-    .cell{width:130px;border-radius:10px;padding:6px 8px}
-    .cell.small{width:105px}
+    .cell{width:150px;border-radius:10px;padding:6px 8px}
+    .cell.small{width:110px}
     .btn-mini{padding:5px 9px;border-radius:999px;font-size:11px}
     .wbar{width:110px;height:8px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden;border:1px solid rgba(255,255,255,.08)}
     .wbar>div{height:100%;background:rgba(122,162,255,.65)}
     .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:16px;max-width:92vw;
-      background:rgba(0,0,0,.72);border:1px solid rgba(255,255,255,.18);padding:9px 14px;border-radius:12px;display:none;font-size:12px}
+      background:rgba(0,0,0,.72);border:1px solid rgba(255,255,255,.18);padding:9px 14px;border-radius:12px;display:none;font-size:12px;z-index:9999}
     .spin{width:12px;height:12px;border-radius:999px;border:2px solid rgba(255,255,255,.22);border-top-color:rgba(255,255,255,.75);
       display:inline-block;animation:rot .7s linear infinite}
     @keyframes rot{to{transform:rotate(360deg)}}
+    .mono{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;}
   </style>
 </head>
 
@@ -63,15 +65,15 @@
 <div class="wrap">
   <div class="top">
     <div>
-      <h1><?= title ?> (｀・ω・´)</h1>
+      <h1>基金看板（GitHub版）(｀・ω・´)</h1>
       <div class="sub">
-        这版把按钮事件改成 addEventListener，并加入“页面自报错”。按钮再也不会假死。
+        支持：基金/LOF（净值+场内价+溢价）/场内标的。数据用 JSONP 拉取（不走 Google Apps Script）。
       </div>
     </div>
 
     <div class="right">
       <span class="pill" id="jsStatus">JS：加载中…</span>
-      <span class="pill" id="cnTime">沪市日期：--</span>
+      <span class="pill" id="cnDate">沪市日期：--</span>
       <label class="pill"><input id="auto" type="checkbox" checked style="vertical-align:middle;margin-right:4px">自动刷新</label>
       <select id="interval">
         <option value="60000" selected>60秒</option>
@@ -98,48 +100,64 @@
       </div>
 
       <div class="tiny" style="margin-top:8px">
-        基金起息日前：收益=0、市值按投入额展示。
+        规则：确认日=净值序列里≥买入日的第一个交易日；起息=确认日的下一交易日。起息日前收益按 0 计。
       </div>
     </div>
 
     <div class="card">
       <div class="row" style="justify-content:space-between">
-        <span class="pill">持仓管理</span>
-        <span class="tiny">只填：代码 + 买入日 + 投入金额（成本可空，前端会推算）</span>
+        <span class="pill">新增持仓</span>
+        <span class="tiny">推荐：基金/LOF 成本可留空（自动用“确认日净值”推算份额）</span>
       </div>
 
       <div class="split"></div>
 
       <div class="row">
-        <select id="kind">
-          <option value="fund">基金（6位，如 161226）</option>
-          <option value="sec">场内（sz/sh+6位；也可只填6位默认sz）</option>
+        <select id="type">
+          <option value="fund" selected>基金（场外净值）</option>
+          <option value="lof">LOF（净值 + 场内价 + 溢价）</option>
+          <option value="sec">场内（股票/ETF等）</option>
         </select>
-        <input id="code" placeholder="例如：161226 或 sz161226" style="flex:1;min-width:260px"/>
+
+        <input id="code" placeholder="例如：161226 或 001467 或 600519" style="flex:1;min-width:260px"/>
+
         <input id="buyDate" type="date" class="cell" />
+
         <input id="amount" placeholder="投入金额(元)" class="cell" />
+
         <input id="cost" placeholder="成本单价(可空)" class="cell" />
-        <button type="button" class="pri" id="btnAdd">新增持仓</button>
+
+        <select id="lofBasis" class="cell small" title="LOF 成本口径">
+          <option value="nav" selected>成本按净值</option>
+          <option value="mkt">成本按场内价</option>
+        </select>
+
+        <button type="button" class="pri" id="btnAdd">新增</button>
       </div>
 
       <div class="tiny" style="margin-top:8px">
-        默认你 15:00 前买入。若 15:00 后买入，把“买入日”改成下一个交易日更贴近确认。
+        tip：若你是 15:00 后买入，把“买入日”选成下一个交易日更贴近确认逻辑。
       </div>
 
       <div class="split"></div>
 
-      <div class="tiny">持仓明细（保存/删除在表格内点击）</div>
+      <div class="tiny">持仓明细（保存/删除）</div>
       <div style="overflow:auto">
         <table id="tb">
           <thead>
           <tr>
-            <th class="namecol">名称</th>
+            <th class="namecol">名称 / 代码</th>
+            <th>类型</th>
             <th>占比</th>
             <th>持有天数</th>
             <th>买入日</th>
-            <th>投入(元)</th>
+            <th>确认/起息</th>
+            <th>投入</th>
             <th>成本单价</th>
-            <th>现价/估值</th>
+            <th>份额</th>
+            <th>净值/估值</th>
+            <th>场内价</th>
+            <th>溢价</th>
             <th>市值</th>
             <th>盈亏</th>
             <th>收益率</th>
@@ -157,14 +175,24 @@
           <span class="pill">7日曲线</span>
           <select id="chartTarget"></select>
           <select id="chartMode">
-            <option value="pct">涨跌幅(相对起点)</option>
-            <option value="val">市值变动(元)</option>
+            <option value="pct" selected>涨跌幅（相对起点）</option>
+            <option value="val">盈亏额（元）</option>
           </select>
         </div>
         <span class="tiny" id="chartStatus">曲线状态：--</span>
       </div>
+
       <div style="margin-top:8px"><canvas id="c1" height="150"></canvas></div>
       <div class="tiny" id="chartHint" style="margin-top:8px"></div>
+    </div>
+
+    <div class="card">
+      <div class="row" style="justify-content:space-between">
+        <span class="pill">调试信息</span>
+        <span class="tiny">如果又出现“按钮没反应”，看这里就能直接定位</span>
+      </div>
+      <div class="split"></div>
+      <div id="debug" class="tiny mono">--</div>
     </div>
 
   </div>
@@ -172,18 +200,6 @@
 
 <div class="toast" id="toast"></div>
 
-<script>
-// Same JS script with minor edits to fix button click issues
-document.addEventListener("DOMContentLoaded", ()=>{
-  document.getElementById("btnRefresh").addEventListener("click", refreshAll);
-  document.getElementById("btnAdd").addEventListener("click", addHolding);
-  document.getElementById("chartTarget").addEventListener("change", drawChart);
-  document.getElementById("chartMode").addEventListener("change", drawChart);
-  document.getElementById("auto").addEventListener("change", setupTimer);
-  document.getElementById("interval").addEventListener("change", setupTimer);
-  setupTimer();
-});
-</script>
-
+<script src="./app.js"></script>
 </body>
 </html>
