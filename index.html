@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>基金看板（GitHub Pages）</title>
-  <link rel="stylesheet" href="./style.css?v=20260202_fix2">
+  <link rel="stylesheet" href="./style.css?v=20260202_fixA">
 </head>
 
 <body>
@@ -13,7 +13,7 @@
       <div class="logo">¥</div>
       <div>
         <div class="title">基金看板</div>
-        <div class="sub">场外净值为准 · 估值仅参考 · 1分钟自动刷新</div>
+        <div class="sub">默认盘中口径：场外看估值 · LOF/场内看行情 · 净值仅做结算参考</div>
       </div>
     </div>
 
@@ -34,21 +34,27 @@
           <div class="v" id="mInvest">--</div>
         </div>
         <div class="metric">
-          <div class="k">市值</div>
+          <div class="k">市值（按当前口径）</div>
           <div class="v" id="mValue">--</div>
         </div>
         <div class="metric">
-          <div class="k">盈亏</div>
+          <div class="k">盈亏（按当前口径）</div>
           <div class="v" id="mProfit">--</div>
         </div>
         <div class="metric">
-          <div class="k">收益率</div>
+          <div class="k">收益率（按当前口径）</div>
           <div class="v" id="mRoi">--</div>
         </div>
       </div>
 
       <div class="toolbar">
         <div class="row">
+          <label class="lb">口径</label>
+          <select id="mode" class="sel">
+            <option value="intraday" selected>盘中（估值/场内价）</option>
+            <option value="settle">结算（官方净值）</option>
+          </select>
+
           <label class="lb">自动刷新</label>
           <select id="auto" class="sel">
             <option value="0">关闭</option>
@@ -67,7 +73,7 @@
     <section class="card">
       <div class="card-hd">
         <div class="h1">新增持仓</div>
-        <div class="hint">金额模式：你只填“投入金额”，系统会自动换算份额</div>
+        <div class="hint">只填投入金额即可；LOF 默认按净值算“结算盈亏”，盘中趋势看场内价/估值</div>
       </div>
 
       <div class="form">
@@ -80,17 +86,17 @@
           <div class="field">
             <div class="lb">类型</div>
             <select id="inType" class="sel">
-              <option value="fund" selected>基金（场外净值）</option>
-              <option value="lof">LOF（默认按场外净值）</option>
-              <option value="market">场内（按场内价）</option>
+              <option value="fund" selected>基金（场外）</option>
+              <option value="lof">LOF（场外净值 + 场内行情）</option>
+              <option value="market">场内（股票式报价）</option>
             </select>
           </div>
 
           <div class="field" id="lofModeWrap" style="display:none">
-            <div class="lb">LOF计价方式</div>
+            <div class="lb">LOF结算口径</div>
             <select id="inLofPriceMode" class="sel">
-              <option value="nav" selected>按场外净值算盈亏（推荐）</option>
-              <option value="mkt">按场内价算盈亏（含溢价）</option>
+              <option value="nav" selected>结算按场外净值（推荐）</option>
+              <option value="mkt">结算按场内价（含溢价）</option>
             </select>
           </div>
 
@@ -106,7 +112,7 @@
 
           <div class="field">
             <div class="lb">成本单价（可选）</div>
-            <input id="inCostPrice" class="ipt" type="number" min="0" step="0.0001" placeholder="不填=自动（用确认净值/当前价）" />
+            <input id="inCostPrice" class="ipt" type="number" min="0" step="0.0001" placeholder="不填=自动（确认净值/当前价）" />
           </div>
         </div>
 
@@ -116,8 +122,8 @@
         </div>
 
         <div class="note">
-          <div>⚠ 场外基金：成本默认用“确认日净值”；收益起算日=确认日后一个交易日（近似 T+1）。</div>
-          <div>⚠ “估值”是盘中推算，会偏；“净值”是官方结果（通常 T-1）。</div>
+          <div>✅ 盘中口径：基金看“估值”，LOF/场内看“场内价”。</div>
+          <div>✅ 结算口径：基金/LOF 看“官方净值”。（收盘后常常还是上个公布日，这是正常现象）</div>
         </div>
       </div>
     </section>
@@ -126,7 +132,7 @@
     <section class="card">
       <div class="card-hd">
         <div class="h1">7日曲线</div>
-        <div class="hint">按买入日起，截取最近 7 个交易日做“累计收益”曲线</div>
+        <div class="hint">说明：7日曲线用“净值历史”（交易日维度），盘中分钟级走势做不了（免费源没有）</div>
       </div>
 
       <div class="chartbar">
@@ -144,7 +150,7 @@
     <section class="card">
       <div class="card-hd">
         <div class="h1">持仓明细</div>
-        <div class="hint">盈亏默认按“场外净值”为准（除非你选了场内/LOF按场内价）</div>
+        <div class="hint">表格中的“市值/盈亏/收益率”会跟随你选择的口径（盘中 or 结算）</div>
       </div>
 
       <div class="tablewrap">
@@ -175,12 +181,11 @@
 
     <footer class="footer">
       <div class="muted">
-        数据源：东方财富（净值/行情）+ 天天基金估值脚本（估值）。如遇接口波动属正常现象。
+        盘中：估值/行情分钟级刷新；收盘后停止更新属正常。结算：官方净值通常晚间或次日更新。
       </div>
     </footer>
   </main>
 
-  <!-- 只引用 app.js，不要再内嵌脚本 -->
-  <script src="./app.js?v=20260202_fix2"></script>
+  <script src="./app.js?v=20260202_fixA"></script>
 </body>
 </html>
