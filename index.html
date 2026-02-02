@@ -2,162 +2,958 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>基金看板（GitHub版）</title>
-  <link rel="stylesheet" href="./style.css" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>基金看板（GitHub Pages版）</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    :root{
+      --bg:#0b1020; --card:#121a33; --muted:#8ea0c7; --text:#e9efff;
+      --good:#36d399; --bad:#fb7185; --line:#22305a; --btn:#2b63ff;
+      --warn:#fbbf24;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:linear-gradient(180deg,#070a14, #0b1020 35%, #070a14);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"PingFang SC","Microsoft YaHei",sans-serif}
+    a{color:#9ec1ff}
+    .wrap{max-width:1100px;margin:22px auto;padding:0 14px 40px}
+    .top{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+    .title{font-size:20px;font-weight:700;letter-spacing:.3px}
+    .subtitle{color:var(--muted);font-size:12px;margin-top:4px}
+    .pill{padding:6px 10px;border:1px solid var(--line);border-radius:999px;color:var(--muted);font-size:12px}
+    .grid{display:grid;grid-template-columns:1.2fr .8fr;gap:12px;margin-top:14px}
+    @media (max-width: 920px){.grid{grid-template-columns:1fr}}
+    .card{background:rgba(18,26,51,.86);border:1px solid rgba(34,48,90,.9);border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+    .card h3{margin:0;padding:14px 14px 0;font-size:14px;color:#cfe0ff}
+    .card .inner{padding:12px 14px 14px}
+    .metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+    @media (max-width:720px){.metrics{grid-template-columns:repeat(2,1fr)}}
+    .m{padding:10px 12px;border:1px solid var(--line);border-radius:14px;background:rgba(10,14,30,.6)}
+    .m .k{color:var(--muted);font-size:12px}
+    .m .v{font-size:18px;font-weight:800;margin-top:6px}
+    .row{display:flex;gap:10px;flex-wrap:wrap}
+    label{display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--muted)}
+    input,select,button{border-radius:12px;border:1px solid var(--line);background:rgba(10,14,30,.65);color:var(--text);padding:10px 10px;font-size:14px}
+    input::placeholder{color:#6f7fa8}
+    button{cursor:pointer;border-color:rgba(43,99,255,.6);background:linear-gradient(180deg,rgba(43,99,255,.95),rgba(43,99,255,.65))}
+    button.secondary{background:rgba(10,14,30,.65);border-color:var(--line)}
+    button.danger{background:rgba(251,113,133,.12);border-color:rgba(251,113,133,.6)}
+    button:disabled{opacity:.5;cursor:not-allowed}
+    .tip{font-size:12px;color:var(--muted);line-height:1.5;margin-top:10px}
+    .tip b{color:#d6e6ff}
+    table{width:100%;border-collapse:separate;border-spacing:0 10px}
+    thead th{font-size:12px;color:var(--muted);font-weight:600;text-align:left;padding:0 10px}
+    tbody tr{background:rgba(10,14,30,.55);border:1px solid var(--line)}
+    tbody td{padding:12px 10px;border-top:1px solid rgba(34,48,90,.35);border-bottom:1px solid rgba(34,48,90,.35);font-size:13px}
+    tbody tr td:first-child{border-left:1px solid rgba(34,48,90,.35);border-top-left-radius:14px;border-bottom-left-radius:14px}
+    tbody tr td:last-child{border-right:1px solid rgba(34,48,90,.35);border-top-right-radius:14px;border-bottom-right-radius:14px}
+    .tag{display:inline-flex;align-items:center;gap:6px}
+    .dot{width:8px;height:8px;border-radius:50%;background:#7aa2ff}
+    .good{color:var(--good);font-weight:700}
+    .bad{color:var(--bad);font-weight:700}
+    .muted{color:var(--muted)}
+    .warn{color:var(--warn);font-weight:700}
+    .actions{display:flex;gap:8px;flex-wrap:wrap}
+    .small{font-size:12px;padding:8px 10px}
+    .chartwrap{height:320px}
+    pre{white-space:pre-wrap;word-break:break-word;background:rgba(10,14,30,.65);border:1px solid var(--line);border-radius:14px;padding:12px;color:#cfe0ff;font-size:12px;line-height:1.5;margin:0}
+  </style>
 </head>
-
 <body>
-  <div class="wrap">
-    <header class="topbar">
-      <div class="title">
-        <h1>基金看板（GitHub版）(｀・ω・´)</h1>
-        <div class="sub">
-          <span id="jsStatus" class="pill">JS：加载中…</span>
-          <span class="muted">沪市日期：</span><span id="cnDate">--</span>
+<div class="wrap">
+  <div class="top">
+    <div>
+      <div class="title">基金看板（GitHub Pages版）(｀・ω・´)</div>
+      <div class="subtitle">不做“基金实时估值”。基金用最新披露净值；LOF/ETF 用场内行情 + 披露净值计算溢价/盈亏。</div>
+    </div>
+    <div class="row">
+      <div class="pill" id="statusPill">JS：加载中…</div>
+      <button class="secondary small" id="btnRefresh">手动刷新</button>
+      <select id="refreshSel" class="small">
+        <option value="60">自动刷新 60秒</option>
+        <option value="120">自动刷新 2分钟</option>
+        <option value="300">自动刷新 5分钟</option>
+        <option value="0">关闭自动刷新</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h3>总览</h3>
+      <div class="inner">
+        <div class="metrics">
+          <div class="m"><div class="k">总投入</div><div class="v" id="mInvest">--</div></div>
+          <div class="m"><div class="k">总市值</div><div class="v" id="mValue">--</div></div>
+          <div class="m"><div class="k">浮动盈亏</div><div class="v" id="mProfit">--</div></div>
+          <div class="m"><div class="k">浮动收益率</div><div class="v" id="mRoi">--</div></div>
+        </div>
+
+        <div class="tip">
+          <b>确认/起息逻辑（用于“申购型基金/LOF申购套利”）：</b><br/>
+          确认日 = 净值序列里 ≥ 买入日 的第一个交易日；起息日 = 确认日的下一交易日。<br/>
+          起息日前盈亏按 0 计（因为份额还没生效）。<br/>
+          <span class="muted">tip：如果你是 15:00 后买入，可把“买入日”选成下一个交易日，更贴近实际。</span>
         </div>
       </div>
+    </div>
 
-      <div class="actions">
-        <button id="btnRefresh" type="button" class="btn">手动刷新</button>
-        <div class="seg">
-          <button data-interval="60" type="button" class="btn ghost">60秒</button>
-          <button data-interval="120" type="button" class="btn ghost">2分钟</button>
-          <button data-interval="300" type="button" class="btn ghost">5分钟</button>
-        </div>
-      </div>
-    </header>
-
-    <section class="cards">
-      <div class="card">
-        <div class="k">总投入</div>
-        <div class="v" id="sumInvest">--</div>
-      </div>
-      <div class="card">
-        <div class="k">总市值（估值）</div>
-        <div class="v" id="sumValue">--</div>
-      </div>
-      <div class="card">
-        <div class="k">浮动盈亏</div>
-        <div class="v" id="sumPnl">--</div>
-      </div>
-      <div class="card">
-        <div class="k">浮动收益率</div>
-        <div class="v" id="sumRoi">--</div>
-      </div>
-    </section>
-
-    <section class="rulebox">
-      <div class="rule">
-        规则：确认日 = 净值序列里 ≥ 买入日 的第一个交易日；起息 = 确认日的下一交易日。起息日前收益按 0 计。
-      </div>
-      <div class="rule muted">
-        tip：如果你是 15:00 后买入，把“买入日”选成下一个交易日更贴近实际确认逻辑。
-      </div>
-    </section>
-
-    <section class="panel">
-      <div class="panel-title">新增持仓</div>
-
-      <form id="addForm" class="form" autocomplete="off">
+    <div class="card">
+      <h3>新增持仓</h3>
+      <div class="inner">
         <div class="row">
-          <label>代码</label>
-          <input id="fCode" placeholder="如：002207 / 001467 / 161226" required />
+          <label style="min-width:140px;">
+            代码
+            <input id="inCode" placeholder="例：161226 / 002207" />
+          </label>
+          <label style="min-width:210px;">
+            类型
+            <select id="inType">
+              <option value="fund">基金（场外净值）</option>
+              <option value="lof_sub">LOF（申购套利：净值买入 + 场内价卖出）</option>
+              <option value="market">场内（ETF/股票：纯场内价）</option>
+            </select>
+          </label>
+          <label style="min-width:160px;">
+            买入日
+            <input id="inBuyDate" type="date" />
+          </label>
         </div>
 
-        <div class="row">
-          <label>类型</label>
-          <select id="fKind">
-            <option value="fund">基金（场外净值）</option>
-            <option value="lof">LOF（净值 + 场内价 + 溢价）</option>
-            <option value="market">场内（ETF/股票等）</option>
-          </select>
+        <div class="row" style="margin-top:10px;">
+          <label style="min-width:160px;">
+            投入（元）
+            <input id="inAmount" inputmode="decimal" placeholder="例：1000" />
+          </label>
+
+          <label style="min-width:220px;">
+            成本口径
+            <select id="inCostMode">
+              <option value="auto">自动（优先用确认日净值/买入日收盘价）</option>
+              <option value="manual">手动填成本单价</option>
+            </select>
+          </label>
+
+          <label style="min-width:200px;">
+            成本单价（可空）
+            <input id="inCostPrice" inputmode="decimal" placeholder="不填则自动推算" />
+          </label>
         </div>
 
-        <div class="row">
-          <label>买入日</label>
-          <input id="fBuyDate" type="date" required />
+        <div class="row" style="margin-top:12px;">
+          <button id="btnAdd">新增</button>
+          <button class="secondary" id="btnClear">清空输入</button>
         </div>
+      </div>
+    </div>
+  </div>
 
-        <div class="row">
-          <label>投入（元）</label>
-          <input id="fInvest" type="number" min="0" step="0.01" placeholder="如：100" required />
+  <div class="card" style="margin-top:12px;">
+    <h3>持仓明细</h3>
+    <div class="inner">
+      <div class="actions" style="justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <div class="muted" id="holdHint">--</div>
+        <div class="actions">
+          <button class="secondary small" id="btnExport">导出JSON</button>
+          <button class="secondary small" id="btnImport">导入JSON</button>
+          <button class="danger small" id="btnWipe">清空持仓</button>
         </div>
+      </div>
 
-        <div class="row" id="rowCostBasis">
-          <label>成本口径</label>
-          <select id="fCostBasis">
-            <option value="nav">成本按净值（常用）</option>
-            <option value="mkt">成本按场内价（需要你填成本单价）</option>
-          </select>
-        </div>
-
-        <div class="row" id="rowUnitCost">
-          <label>成本单价（可空）</label>
-          <input id="fUnitCost" type="number" min="0" step="0.0001" placeholder="留空=自动用“确认日净值”推算份额" />
-        </div>
-
-        <div class="row span2">
-          <button id="btnAdd" type="submit" class="btn primary">新增</button>
-          <button id="btnClear" type="button" class="btn ghost">清空输入</button>
-        </div>
-      </form>
-    </section>
-
-    <section class="panel">
-      <div class="panel-title">持仓明细（保存/删除）</div>
-
-      <div class="table-wrap">
-        <table class="table" id="posTable">
+      <div style="overflow:auto;">
+        <table>
           <thead>
-            <tr>
-              <th>名称/代码</th>
-              <th>类型</th>
-              <th>占比</th>
-              <th>持有天数</th>
-              <th>买入日</th>
-              <th>确认/起息</th>
-              <th class="num">投入</th>
-              <th class="num">成本单价</th>
-              <th class="num">份额</th>
-              <th class="num">净值/估值</th>
-              <th class="num">场内价</th>
-              <th class="num">溢价</th>
-              <th class="num">市值</th>
-              <th class="num">盈亏</th>
-              <th class="num">收益率</th>
-              <th>操作</th>
-            </tr>
+          <tr>
+            <th>名称/代码</th><th>类型</th><th>占比</th><th>持有天数</th><th>买入日</th><th>确认/起息</th>
+            <th>投入</th><th>成本单价</th><th>份额</th><th>净值</th><th>场内价</th><th>溢价</th>
+            <th>市值</th><th>盈亏</th><th>收益率</th><th>操作</th>
+          </tr>
           </thead>
-          <tbody id="posTbody">
-            <tr><td colspan="16" class="muted">暂无持仓。先在上面新增一个 (ง •̀_•́)ง</td></tr>
+          <tbody id="tbBody">
+          <tr><td colspan="16" class="muted">暂无持仓。先在上面新增一个 (ง •̀_•́)ง</td></tr>
           </tbody>
         </table>
       </div>
-    </section>
-
-    <section class="panel">
-      <div class="panel-title">7日曲线</div>
-      <div class="charts">
-        <div class="chart-card">
-          <div class="chart-title">涨跌幅（相对起点）</div>
-          <canvas id="chartRate"></canvas>
-        </div>
-        <div class="chart-card">
-          <div class="chart-title">盈亏额（相对起点）</div>
-          <canvas id="chartPnl"></canvas>
-        </div>
-      </div>
-      <div class="muted" id="curveHint">曲线状态：--</div>
-    </section>
-
-    <section class="panel">
-      <div class="panel-title">调试信息</div>
-      <pre id="debugBox" class="debug">--</pre>
-    </section>
+    </div>
   </div>
 
-  <script src="./app.js"></script>
+  <div class="grid" style="margin-top:12px;">
+    <div class="card">
+      <h3>7日曲线（按投入口径）</h3>
+      <div class="inner">
+        <div class="row" style="align-items:center;justify-content:space-between;">
+          <label style="min-width:260px;">
+            曲线对象
+            <select id="curveSel"></select>
+          </label>
+          <div class="pill" id="curveState">曲线状态：--</div>
+        </div>
+        <div class="chartwrap">
+          <canvas id="chart7d"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>调试信息（按钮没反应/161226识别失败时看这里）</h3>
+      <div class="inner">
+        <pre id="debugBox">--</pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  // ======= 基础工具 =======
+  const $ = (id) => document.getElementById(id);
+  const logLines = [];
+  const log = (msg, obj) => {
+    const t = new Date().toLocaleString();
+    logLines.push(`[${t}] ${msg}${obj ? " " + safeJson(obj) : ""}`);
+    if (logLines.length > 200) logLines.shift();
+    $("debugBox").textContent = logLines.join("\\n");
+  };
+  const safeJson = (o) => {
+    try { return JSON.stringify(o); } catch { return String(o); }
+  };
+  const fmtMoney = (n) => {
+    if (!isFinite(n)) return "--";
+    return Number(n).toLocaleString("zh-CN", {minimumFractionDigits:2, maximumFractionDigits:2});
+  };
+  const fmtPct = (n) => {
+    if (!isFinite(n)) return "--";
+    return (n * 100).toFixed(2) + "%";
+  };
+  const todayStr = () => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth()+1).padStart(2,"0");
+    const dd = String(d.getDate()).padStart(2,"0");
+    return `${y}-${m}-${dd}`;
+  };
+  const daysBetween = (aStr, bStr) => {
+    const a = new Date(aStr + "T00:00:00");
+    const b = new Date(bStr + "T00:00:00");
+    return Math.max(0, Math.round((b - a) / 86400000));
+  };
+  const pick = (v, def) => (v === undefined || v === null || v === "" ? def : v);
+
+  // ======= JSONP（解决跨域） =======
+  function jsonp(url, cbParam = "cb", timeoutMs = 12000) {
+    return new Promise((resolve, reject) => {
+      const cbName = "__jp_" + Math.random().toString(16).slice(2);
+      const sep = url.includes("?") ? "&" : "?";
+      const full = url + sep + cbParam + "=" + cbName + "&_=" + Date.now();
+
+      let done = false;
+      const timer = setTimeout(() => {
+        if (done) return;
+        done = true;
+        cleanup();
+        reject(new Error("JSONP timeout"));
+      }, timeoutMs);
+
+      function cleanup() {
+        clearTimeout(timer);
+        delete window[cbName];
+        script.remove();
+      }
+
+      window[cbName] = (data) => {
+        if (done) return;
+        done = true;
+        cleanup();
+        resolve(data);
+      };
+
+      const script = document.createElement("script");
+      script.src = full;
+      script.onerror = () => {
+        if (done) return;
+        done = true;
+        cleanup();
+        reject(new Error("JSONP load error"));
+      };
+      document.head.appendChild(script);
+    });
+  }
+
+  // ======= Eastmoney：基金披露净值（pingzhongdata js） =======
+  // 这个脚本会写全局变量：fS_name、fS_code、Data_netWorthTrend 等（每次加载会覆盖）
+  function loadPingZhongData(fundCode) {
+    return new Promise((resolve, reject) => {
+      const url = `https://fund.eastmoney.com/pingzhongdata/${fundCode}.js`;
+      const script = document.createElement("script");
+      script.src = url + "?v=" + Date.now();
+      script.onload = () => {
+        try {
+          const name = window.fS_name;
+          const code = window.fS_code;
+          const trend = window.Data_netWorthTrend; // [{x:ms,y:nav,...},...]
+          if (!name || !Array.isArray(trend) || trend.length === 0) {
+            throw new Error("pingzhongdata missing fields");
+          }
+          const navSeries = trend
+            .map(it => ({ date: msToDate(it.x), nav: Number(it.y) }))
+            .filter(it => isFinite(it.nav))
+            .sort((a,b)=> a.date.localeCompare(b.date));
+
+          const latest = navSeries[navSeries.length - 1];
+
+          // 清理全局（避免下一个基金被污染）
+          ["fS_name","fS_code","Data_netWorthTrend","Data_ACWorthTrend","Data_grandTotal"].forEach(k => {
+            try { delete window[k]; } catch {}
+          });
+
+          resolve({ name, code, navSeries, latestNav: latest?.nav, latestNavDate: latest?.date });
+        } catch (e) {
+          reject(e);
+        } finally {
+          script.remove();
+        }
+      };
+      script.onerror = () => {
+        script.remove();
+        reject(new Error("pingzhongdata load error"));
+      };
+      document.head.appendChild(script);
+    });
+  }
+
+  function msToDate(ms) {
+    const d = new Date(ms);
+    const y = d.getFullYear();
+    const m = String(d.getMonth()+1).padStart(2,"0");
+    const dd = String(d.getDate()).padStart(2,"0");
+    return `${y}-${m}-${dd}`;
+  }
+
+  // ======= Eastmoney：场内行情（最新价） & 近N日K线（收盘价序列） =======
+  function guessSecId(code) {
+    // 0 = 深市，1 = 沪市（经验规则 + 自动兜底）
+    if (/^(5|6|9)/.test(code)) return "1." + code; // ETF/沪股常见
+    return "0." + code; // 深市/LOF多在深市（16xxxx）
+  }
+
+  async function loadQuote(code) {
+    const tryList = [guessSecId(code)];
+    // 自动兜底：如果猜错市场，再试一次
+    if (tryList[0].startsWith("0.")) tryList.push("1."+code);
+    else tryList.push("0."+code);
+
+    let lastErr = null;
+    for (const secid of tryList) {
+      try {
+        const url = `https://push2.eastmoney.com/api/qt/stock/get?secid=${secid}&fields=f2,f3,f4,f12,f14`;
+        const data = await jsonp(url, "cb", 10000);
+        const d = data?.data;
+        const price = Number(d?.f2);
+        const name = d?.f14;
+        if (name && isFinite(price) && price > 0) {
+          return { secid, name, code: d?.f12 || code, price, pct: Number(d?.f3)/100, chg: Number(d?.f4) };
+        }
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    throw lastErr || new Error("quote failed");
+  }
+
+  async function loadKlineClose(code, limit = 10) {
+    const tryList = [guessSecId(code)];
+    if (tryList[0].startsWith("0.")) tryList.push("1."+code); else tryList.push("0."+code);
+
+    let lastErr = null;
+    for (const secid of tryList) {
+      try {
+        const url = `https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=${secid}&klt=101&fqt=1&lmt=${limit}&fields2=f51,f52,f53,f54,f55,f56`;
+        const data = await jsonp(url, "cb", 12000);
+        const kl = data?.data?.klines;
+        if (Array.isArray(kl) && kl.length > 0) {
+          const rows = kl.map(s => {
+            const [date, open, close] = s.split(",");
+            return { date, close: Number(close) };
+          }).filter(x => x.date && isFinite(x.close));
+          if (rows.length > 0) return { secid, rows };
+        }
+      } catch (e) { lastErr = e; }
+    }
+    throw lastErr || new Error("kline failed");
+  }
+
+  // ======= 业务：确认日/起息日 =======
+  function calcConfirmInterest(navSeries, buyDate) {
+    const bd = buyDate;
+    const idx = navSeries.findIndex(x => x.date >= bd);
+    if (idx === -1) {
+      const last = navSeries[navSeries.length - 1];
+      return { confirmDate: last.date, interestDate: last.date };
+    }
+    const confirm = navSeries[idx].date;
+    const interest = navSeries[idx + 1]?.date || confirm;
+    return { confirmDate: confirm, interestDate: interest };
+  }
+
+  // ======= 持仓 & 存储 =======
+  const LS_KEY = "fund_dashboard_holdings_v3";
+  const state = {
+    holdings: [],
+    cache: {
+      fund: new Map(),   // code -> pingzhongdata
+      quote: new Map(),  // code -> quote
+      kline: new Map()   // code -> kline rows
+    },
+    chart: null,
+    refreshTimer: null
+  };
+
+  function saveHoldings() {
+    localStorage.setItem(LS_KEY, JSON.stringify(state.holdings));
+  }
+  function loadHoldings() {
+    const raw = localStorage.getItem(LS_KEY);
+    if (!raw) return [];
+    try { return JSON.parse(raw) || []; } catch { return []; }
+  }
+  function uuid() {
+    return Math.random().toString(16).slice(2) + Date.now().toString(16);
+  }
+
+  // ======= 计算：单笔持仓当前估值 =======
+  async function computeHolding(h) {
+    const code = h.code;
+
+    // 1) 基金净值数据（fund / lof_sub 需要）
+    let fundData = null;
+    if (h.type === "fund" || h.type === "lof_sub") {
+      fundData = state.cache.fund.get(code);
+      if (!fundData) {
+        fundData = await loadPingZhongData(code);
+        state.cache.fund.set(code, fundData);
+      }
+    }
+
+    // 2) 场内行情（lof_sub / market 需要）
+    let quote = null;
+    let kline = null;
+    if (h.type === "lof_sub" || h.type === "market") {
+      quote = state.cache.quote.get(code);
+      if (!quote) {
+        quote = await loadQuote(code);
+        state.cache.quote.set(code, quote);
+      }
+      kline = state.cache.kline.get(code);
+      if (!kline) {
+        kline = await loadKlineClose(code, 12);
+        state.cache.kline.set(code, kline);
+      }
+    }
+
+    const name = (quote?.name) || (fundData?.name) || "--";
+    const buyDate = h.buyDate;
+    const invest = Number(h.amount);
+
+    // 成本单价 & 份额（shares）
+    let costPrice = Number(h.costPrice);
+    let shares = NaN;
+    let confirmDate = "--", interestDate = "--";
+
+    if (h.type === "market") {
+      // 场内：默认成本用买入日收盘价（或手动）
+      if (!isFinite(costPrice) || costPrice <= 0) {
+        if (h.costMode === "auto") {
+          // 用K线找 buyDate 对应收盘价；找不到就用最新价
+          const row = kline?.rows?.find(r => r.date === buyDate) || kline?.rows?.[kline.rows.length - 1];
+          costPrice = Number(row?.close) || Number(quote?.price);
+        }
+      }
+      shares = invest / costPrice;
+    } else {
+      // fund / lof_sub：申购口径（确认/起息控制“起息前盈亏=0”）
+      const navSeries = fundData.navSeries;
+      const ci = calcConfirmInterest(navSeries, buyDate);
+      confirmDate = ci.confirmDate; interestDate = ci.interestDate;
+
+      if (!isFinite(costPrice) || costPrice <= 0) {
+        if (h.costMode === "auto") {
+          // 成本默认用确认日净值
+          const navOnConfirm = navSeries.find(x => x.date === confirmDate)?.nav;
+          costPrice = Number(navOnConfirm) || Number(fundData.latestNav);
+        }
+      }
+      shares = invest / costPrice;
+    }
+
+    // 今日净值（披露）/ 今日场内价（实时）
+    const nav = fundData?.latestNav;
+    const navDate = fundData?.latestNavDate;
+    const mkt = quote?.price;
+
+    // 当前市值/盈亏（注意：起息日前收益=0）
+    let value = NaN, profit = NaN;
+
+    if (h.type === "fund") {
+      // 基金：用披露净值
+      const effectivePrice = Number(nav);
+      value = shares * effectivePrice;
+      // 起息日前按0
+      if (interestDate !== "--" && todayStr() < interestDate) {
+        value = invest; profit = 0;
+      } else {
+        profit = value - invest;
+      }
+    }
+    else if (h.type === "lof_sub") {
+      // LOF申购套利：成本=净值；市值用“场内价”（因为你最终按场内卖出）
+      if (interestDate !== "--" && todayStr() < interestDate) {
+        value = invest; profit = 0;
+      } else {
+        const effectivePrice = Number(mkt);
+        value = shares * effectivePrice;
+        profit = value - invest;
+      }
+    }
+    else { // market
+      value = shares * Number(mkt);
+      profit = value - invest;
+    }
+
+    const roi = profit / invest;
+
+    // 溢价（仅 LOF：场内价 vs 披露净值）
+    let premium = NaN;
+    if (h.type === "lof_sub" && isFinite(nav) && nav > 0 && isFinite(mkt) && mkt > 0) {
+      premium = (mkt / nav) - 1;
+    }
+
+    return {
+      id: h.id,
+      name, code, type: h.type,
+      buyDate, confirmDate, interestDate,
+      invest, costPrice, shares,
+      nav, navDate,
+      mkt,
+      premium,
+      value, profit, roi
+    };
+  }
+
+  // ======= 7日曲线：按投入口径（收益率/盈亏额） =======
+  async function buildCurve(targetId) {
+    // targetId: "ALL" 或 holding.id
+    const today = todayStr();
+    const points = [];
+
+    if (targetId === "ALL") {
+      // 组合：把每个持仓各自的“近7个交易日盈亏”加总
+      // 简化：以“近7个自然日”里能取到的点为准（基金用净值日，场内用K线日）
+      const evaluated = await Promise.allSettled(state.holdings.map(h => computeHoldingWithCurveBase(h)));
+      const items = evaluated.filter(x => x.status === "fulfilled").map(x => x.value);
+
+      // 收集所有日期
+      const dateSet = new Set();
+      items.forEach(it => it.series.forEach(p => dateSet.add(p.date)));
+      const dates = Array.from(dateSet).sort().slice(-7);
+
+      for (const d of dates) {
+        let investSum = 0, profitSum = 0;
+        for (const it of items) {
+          const p = it.series.find(x => x.date === d);
+          if (!p) continue;
+          investSum += it.invest;
+          profitSum += p.profit;
+        }
+        if (investSum > 0) {
+          points.push({ date: d, profit: profitSum, roi: profitSum / investSum });
+        }
+      }
+      return { title: "总组合", points };
+    }
+
+    const h = state.holdings.find(x => x.id === targetId);
+    if (!h) return { title: "--", points: [] };
+
+    const res = await computeHoldingWithCurveBase(h);
+    // 取最后7个点
+    const last = res.series.slice(-7);
+    last.forEach(p => points.push({ date: p.date, profit: p.profit, roi: p.roi }));
+    return { title: `${res.name}（${res.code}）`, points };
+  }
+
+  async function computeHoldingWithCurveBase(h) {
+    const code = h.code;
+    let fundData = null, quote = null, kline = null;
+
+    if (h.type === "fund" || h.type === "lof_sub") {
+      fundData = state.cache.fund.get(code) || await loadPingZhongData(code);
+      state.cache.fund.set(code, fundData);
+    }
+    if (h.type === "lof_sub" || h.type === "market") {
+      quote = state.cache.quote.get(code) || await loadQuote(code);
+      state.cache.quote.set(code, quote);
+      kline = state.cache.kline.get(code) || await loadKlineClose(code, 12);
+      state.cache.kline.set(code, kline);
+    }
+
+    const name = (quote?.name) || (fundData?.name) || "--";
+    const invest = Number(h.amount);
+    const buyDate = h.buyDate;
+
+    let costPrice = Number(h.costPrice);
+    let shares = NaN;
+
+    let confirmDate = "--", interestDate = "--";
+
+    if (h.type === "market") {
+      if (!isFinite(costPrice) || costPrice <= 0) {
+        const row = kline?.rows?.find(r => r.date === buyDate) || kline?.rows?.[kline.rows.length - 1];
+        costPrice = Number(row?.close) || Number(quote?.price);
+      }
+      shares = invest / costPrice;
+
+      // series：用k线 close
+      const rows = (kline?.rows || []).slice(-12);
+      const series = rows.map(r => {
+        const price = r.close;
+        const value = shares * price;
+        const profit = value - invest;
+        return { date: r.date, profit, roi: profit / invest };
+      });
+      return { name, code, invest, series };
+    }
+
+    // fund / lof_sub
+    const navSeries = fundData.navSeries;
+    const ci = calcConfirmInterest(navSeries, buyDate);
+    confirmDate = ci.confirmDate; interestDate = ci.interestDate;
+
+    if (!isFinite(costPrice) || costPrice <= 0) {
+      const navOnConfirm = navSeries.find(x => x.date === confirmDate)?.nav;
+      costPrice = Number(navOnConfirm) || Number(fundData.latestNav);
+    }
+    shares = invest / costPrice;
+
+    if (h.type === "fund") {
+      const series = navSeries.slice(-12).map(r => {
+        const price = r.nav;
+        // 起息日前收益为0
+        if (r.date < interestDate) return { date: r.date, profit: 0, roi: 0 };
+        const value = shares * price;
+        const profit = value - invest;
+        return { date: r.date, profit, roi: profit / invest };
+      });
+      return { name, code, invest, series };
+    }
+
+    // lof_sub：成本=净值，价值=场内价（用k线 close）
+    const rows = (kline?.rows || []).slice(-12);
+    const series = rows.map(r => {
+      if (r.date < interestDate) return { date: r.date, profit: 0, roi: 0 };
+      const value = shares * r.close;
+      const profit = value - invest;
+      return { date: r.date, profit, roi: profit / invest };
+    });
+    return { name, code, invest, series };
+  }
+
+  // ======= 渲染 =======
+  function setStatus(ok, text) {
+    const el = $("statusPill");
+    el.textContent = text;
+    el.style.borderColor = ok ? "rgba(54,211,153,.6)" : "rgba(251,113,133,.6)";
+    el.style.color = ok ? "#bfffe5" : "#ffd1d9";
+  }
+
+  function typeLabel(t) {
+    if (t === "fund") return "基金";
+    if (t === "lof_sub") return "LOF申购套利";
+    return "场内";
+  }
+
+  function populateCurveSel() {
+    const sel = $("curveSel");
+    sel.innerHTML = "";
+    const optAll = document.createElement("option");
+    optAll.value = "ALL"; optAll.textContent = "总组合";
+    sel.appendChild(optAll);
+    state.holdings.forEach(h => {
+      const o = document.createElement("option");
+      o.value = h.id;
+      o.textContent = `${h.code} · ${typeLabel(h.type)}`;
+      sel.appendChild(o);
+    });
+  }
+
+  function renderTable(rows) {
+    const tb = $("tbBody");
+    tb.innerHTML = "";
+    if (!rows.length) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td colspan="16" class="muted">暂无持仓。先在上面新增一个 (ง •̀_•́)ง</td>`;
+      tb.appendChild(tr);
+      return;
+    }
+
+    rows.forEach(r => {
+      const holdDays = daysBetween(r.buyDate, todayStr());
+      const profitCls = r.profit >= 0 ? "good" : "bad";
+      const roiCls = r.roi >= 0 ? "good" : "bad";
+      const premTxt = isFinite(r.premium) ? fmtPct(r.premium) : "--";
+      const premCls = isFinite(r.premium) ? (r.premium >= 0 ? "warn" : "muted") : "muted";
+
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>
+          <div class="tag"><span class="dot"></span><div>
+            <div style="font-weight:800">${escapeHtml(r.name)}</div>
+            <div class="muted">${r.code}</div>
+          </div></div>
+        </td>
+        <td class="muted">${typeLabel(r.type)}</td>
+        <td class="muted">--</td>
+        <td class="muted">${holdDays} 天</td>
+        <td class="muted">${r.buyDate}</td>
+        <td class="muted">${r.confirmDate}/${r.interestDate}</td>
+        <td>${fmtMoney(r.invest)}</td>
+        <td class="muted">${isFinite(r.costPrice) ? r.costPrice.toFixed(4) : "--"}</td>
+        <td class="muted">${isFinite(r.shares) ? r.shares.toFixed(4) : "--"}</td>
+        <td class="muted">${isFinite(r.nav) ? (r.nav.toFixed(4) + " ("+r.navDate+")") : "--"}</td>
+        <td class="muted">${isFinite(r.mkt) ? r.mkt.toFixed(4) : "--"}</td>
+        <td class="${premCls}">${premTxt}</td>
+        <td>${fmtMoney(r.value)}</td>
+        <td class="${profitCls}">${fmtMoney(r.profit)}</td>
+        <td class="${roiCls}">${fmtPct(r.roi)}</td>
+        <td>
+          <div class="actions">
+            <button class="secondary small" data-act="curve" data-id="${r.id}">看曲线</button>
+            <button class="danger small" data-act="del" data-id="${r.id}">删除</button>
+          </div>
+        </td>
+      `;
+      tb.appendChild(tr);
+    });
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  }
+
+  function renderMetrics(sumInvest, sumValue, sumProfit) {
+    $("mInvest").textContent = fmtMoney(sumInvest);
+    $("mValue").textContent = fmtMoney(sumValue);
+    const pEl = $("mProfit");
+    pEl.textContent = fmtMoney(sumProfit);
+    pEl.className = "v " + (sumProfit >= 0 ? "good" : "bad");
+
+    const roi = sumProfit / sumInvest;
+    const rEl = $("mRoi");
+    rEl.textContent = fmtPct(roi);
+    rEl.className = "v " + (roi >= 0 ? "good" : "bad");
+  }
+
+  function renderChart(title, points) {
+    $("curveState").textContent = points.length ? `曲线状态：${title}（${points.length}点）` : "曲线状态：无数据";
+    const ctx = $("chart7d");
+
+    const labels = points.map(p => p.date);
+    const roi = points.map(p => (p.roi * 100));
+    const profit = points.map(p => p.profit);
+
+    if (state.chart) state.chart.destroy();
+    state.chart = new Chart(ctx, {
+      type: "line",
+      data: {
+        labels,
+        datasets: [
+          { label: "收益率(%)", data: roi, tension: .25, yAxisID: "y1" },
+          { label: "盈亏额(元)", data: profit, tension: .25, yAxisID: "y2" },
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: "index", intersect: false },
+        scales: {
+          y1: { position: "left", ticks: { callback: (v)=> v + "%" } },
+          y2: { position: "right", grid: { drawOnChartArea: false } }
+        }
+      }
+    });
+  }
+
+  // ======= 主流程：刷新 =======
+  async function refreshAll() {
+    setStatus(true, "JS：刷新中…");
+    log("refresh start", { holdings: state.holdings.length });
+
+    if (!state.holdings.length) {
+      renderMetrics(0,0,0);
+      renderTable([]);
+      populateCurveSel();
+      renderChart("总组合", []);
+      setStatus(true, "JS：就绪（无持仓）");
+      return;
+    }
+
+    const results = [];
+    for (const h of state.holdings) {
+      try {
+        const r = await computeHolding(h);
+        results.push(r);
+      } catch (e) {
+        log("computeHolding failed", { code: h.code, type: h.type, err: String(e) });
+      }
+    }
+
+    // 汇总
+    let sumInvest = 0, sumValue = 0, sumProfit = 0;
+    results.forEach(r => {
+      sumInvest += r.invest;
+      sumValue += r.value;
+      sumProfit += r.profit;
+    });
+
+    renderMetrics(sumInvest, sumValue, sumProfit);
+    renderTable(results);
+    $("holdHint").textContent = `持仓数：${results.length}（失败的会在调试信息里提示）`;
+
+    // 曲线
+    populateCurveSel();
+    const sel = $("curveSel");
+    const target = pick(sel.value, "ALL");
+    try {
+      const curve = await buildCurve(target);
+      renderChart(curve.title, curve.points);
+    } catch (e) {
+      log("buildCurve failed", { target, err: String(e) });
+      renderChart("--", []);
+    }
+
+    setStatus(true, "JS：就绪 ✅");
+    log("refresh done", { sumInvest, sumValue, sumProfit });
+  }
+
+  // ======= 交互 =======
+  function bindEvents() {
+    $("btnRefresh").addEventListener("click", refreshAll);
+
+    $("refreshSel").addEventListener("change", () => {
+      const s = Number($("refreshSel").value);
+      if (state.refreshTimer) clearInterval(state.refreshTimer);
+      state.refreshTimer = null;
+      if (s > 0) state.refreshTimer = setInterval(refreshAll, s * 1000);
+      log("auto refresh", { seconds: s });
+    });
+
+    $("btnClear").addEventListener("click", () => {
+      $("inCode").value = "";
+      $("inAmount").value = "";
+      $("inCostPrice").value = "";
+      $("inType").value = "fund";
+      $("inCostMode").value = "auto";
+      $("inBuyDate").value = todayStr();
+    });
+
+    $("btnAdd").addEventListener("click", async () => {
+      const code = $("inCode").value.trim();
+      const type = $("inType").value;
+      const buyDate = $("inBuyDate").value || todayStr();
+      const amount = Number($("inAmount").value);
+      const costMode = $("inCostMode").value;
+      const costPrice = $("inCostPrice").value.trim();
+
+      if (!/^[0-9]{6}$/.test(code)) { alert("代码请输入6位数字"); return; }
+      if (!(amount > 0)) { alert("投入金额必须 > 0"); return; }
+
+      // 小聪明：如果是16开头，默认更像LOF申购套利
+      let finalType = type;
+      if (type === "fund" && code.startsWith("16")) finalType = "lof_sub";
+
+      const h = { id: uuid(), code, type: finalType, buyDate, amount, costMode, costPrice };
+      state.holdings.push(h);
+      saveHoldings();
+      log("add holding", h);
+
+      // 立刻刷新，顺便验证 161226 是否能识别
+      await refreshAll();
+    });
+
+    $("curveSel").addEventListener("change", async () => {
+      try {
+        const curve = await buildCurve($("curveSel").value);
+        renderChart(curve.title, curve.points);
+      } catch (e) {
+        log("curveSel change failed", { err: String(e) });
+      }
+    });
+
+    $("tbBody").addEventListener("click", async (ev) => {
+      const btn = ev.target.closest("button");
+      if (!btn) return;
+      const act = btn.dataset.act;
+      const id = btn.dataset.id;
+
+      if (act === "del") {
+        if (!confirm("确定删除这条持仓吗？")) return;
+        state.holdings = state.holdings.filter(x => x.id !== id);
+        saveHoldings();
+        log("delete holding", { id });
+        await refreshAll();
+      }
+
+      if (act === "curve") {
+        $("curveSel").value = id;
+        const curve = await buildCurve(id);
+        renderChart(curve.title, curve.points);
+      }
+    });
+
+    $("btnWipe").addEventListener("click", async () => {
+      if (!confirm("确定清空全部持仓？")) return;
+      state.holdings = [];
+      saveHoldings();
+      log("wipe holdings");
+      await refreshAll();
+    });
+
+    $("btnExport").addEventListener("click", async () => {
+      const text = JSON.stringify(state.holdings, null, 2);
+      await navigator.clipboard.writeText(text);
+      alert("已复制到剪贴板（JSON）");
+    });
+
+    $("btnImport").addEventListener("click", async () => {
+      const text = prompt("把之前导出的 JSON 粘贴进来：");
+      if (!text) return;
+      try {
+        const arr = JSON.parse(text);
+        if (!Array.isArray(arr)) throw new Error("not array");
+        state.holdings = arr;
+        saveHoldings();
+        log("import holdings", { count: arr.length });
+        await refreshAll();
+      } catch (e) {
+        alert("导入失败：JSON 格式不对");
+        log("import failed", { err: String(e) });
+      }
+    });
+  }
+
+  // ======= 启动 =======
+  function boot() {
+    $("inBuyDate").value = todayStr();
+    state.holdings = loadHoldings();
+    bindEvents();
+    $("refreshSel").value = "60";
+    $("refreshSel").dispatchEvent(new Event("change"));
+    setStatus(true, "JS：启动完成，准备刷新…");
+    refreshAll().catch(e => {
+      setStatus(false, "JS：启动失败");
+      log("boot refresh failed", { err: String(e) });
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded", boot);
+})();
+</script>
 </body>
 </html>
