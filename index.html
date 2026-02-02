@@ -3,167 +3,184 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>基金看板 v4（GitHub Pages）</title>
-  <style>
-    :root{
-      --bg:#0b1020; --card:#121a33; --muted:#8ea0c7; --text:#e9efff;
-      --good:#36d399; --bad:#fb7185; --line:#22305a; --btn:#2b63ff; --warn:#fbbf24;
-    }
-    *{box-sizing:border-box}
-    body{margin:0;background:linear-gradient(180deg,#070a14,#0b1020 35%,#070a14);color:var(--text);
-      font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"PingFang SC","Microsoft YaHei",sans-serif}
-    .wrap{max-width:1100px;margin:22px auto;padding:0 14px 40px}
-    .top{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
-    .title{font-size:18px;font-weight:800}
-    .subtitle{color:var(--muted);font-size:12px;margin-top:4px}
-    .pill{padding:6px 10px;border:1px solid var(--line);border-radius:999px;color:var(--muted);font-size:12px}
-    .grid{display:grid;grid-template-columns:1.2fr .8fr;gap:12px;margin-top:14px}
-    @media (max-width: 920px){.grid{grid-template-columns:1fr}}
-    .card{background:rgba(18,26,51,.88);border:1px solid rgba(34,48,90,.9);border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
-    .card h3{margin:0;padding:14px 14px 0;font-size:14px;color:#cfe0ff}
-    .inner{padding:12px 14px 14px}
-    .metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
-    @media (max-width:720px){.metrics{grid-template-columns:repeat(2,1fr)}}
-    .m{padding:10px 12px;border:1px solid var(--line);border-radius:14px;background:rgba(10,14,30,.6)}
-    .k{color:var(--muted);font-size:12px}
-    .v{font-size:18px;font-weight:900;margin-top:6px}
-    .row{display:flex;gap:10px;flex-wrap:wrap}
-    label{display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--muted)}
-    input,select,button{border-radius:12px;border:1px solid var(--line);background:rgba(10,14,30,.65);
-      color:var(--text);padding:10px 10px;font-size:14px}
-    button{cursor:pointer;border-color:rgba(43,99,255,.6);background:linear-gradient(180deg,rgba(43,99,255,.95),rgba(43,99,255,.65))}
-    button.secondary{background:rgba(10,14,30,.65);border-color:var(--line)}
-    button.danger{background:rgba(251,113,133,.12);border-color:rgba(251,113,133,.6)}
-    button:disabled{opacity:.5;cursor:not-allowed}
-    .tip{font-size:12px;color:var(--muted);line-height:1.55;margin-top:10px}
-    table{width:100%;border-collapse:separate;border-spacing:0 10px}
-    thead th{font-size:12px;color:var(--muted);font-weight:700;text-align:left;padding:0 10px}
-    tbody td{padding:12px 10px;border-top:1px solid rgba(34,48,90,.35);border-bottom:1px solid rgba(34,48,90,.35);font-size:13px}
-    tbody tr{background:rgba(10,14,30,.55)}
-    tbody tr td:first-child{border-left:1px solid rgba(34,48,90,.35);border-top-left-radius:14px;border-bottom-left-radius:14px}
-    tbody tr td:last-child{border-right:1px solid rgba(34,48,90,.35);border-top-right-radius:14px;border-bottom-right-radius:14px}
-    .good{color:var(--good);font-weight:800}
-    .bad{color:var(--bad);font-weight:800}
-    .warn{color:var(--warn);font-weight:800}
-    .muted{color:var(--muted)}
-    .chartwrap{height:320px}
-    canvas{width:100%;height:100%;display:block;background:rgba(10,14,30,.45);border:1px solid rgba(34,48,90,.6);border-radius:14px}
-    pre{white-space:pre-wrap;word-break:break-word;background:rgba(10,14,30,.65);border:1px solid var(--line);
-      border-radius:14px;padding:12px;color:#cfe0ff;font-size:12px;line-height:1.55;margin:0}
-  </style>
+  <title>基金看板（GitHub Pages）</title>
+  <link rel="stylesheet" href="./style.css?v=20260202_fix2">
 </head>
+
 <body>
-<div class="wrap">
-  <div class="top">
-    <div>
-      <div class="title">基金看板 v4（GitHub Pages）(｀・ω・´)</div>
-      <div class="subtitle">v4 特点：按钮必能点；错误直接显示在页面；7日曲线从买入日/确认逻辑计算；LOF(161226) 自动识别深/沪市场。</div>
-    </div>
-    <div class="row">
-      <div class="pill" id="status">JS：启动中…</div>
-      <button class="secondary" id="btnRefresh">手动刷新</button>
-      <select id="auto">
-        <option value="60">自动刷新 60秒</option>
-        <option value="120">自动刷新 2分钟</option>
-        <option value="300">自动刷新 5分钟</option>
-        <option value="0">关闭自动刷新</option>
-      </select>
-    </div>
-  </div>
-
-  <div class="grid">
-    <div class="card">
-      <h3>总览</h3>
-      <div class="inner">
-        <div class="metrics">
-          <div class="m"><div class="k">总投入</div><div class="v" id="mInvest">--</div></div>
-          <div class="m"><div class="k">总市值</div><div class="v" id="mValue">--</div></div>
-          <div class="m"><div class="k">浮动盈亏</div><div class="v" id="mProfit">--</div></div>
-          <div class="m"><div class="k">浮动收益率</div><div class="v" id="mRoi">--</div></div>
-        </div>
-        <div class="tip">
-          规则：确认日 = 净值序列里 ≥ 买入日 的第一个交易日；起息 = 确认日的下一交易日。起息日前收益按 0 计。<br/>
-          tip：15:00 后买入可把“买入日”选成下一个交易日，更贴近确认/起息逻辑。
-        </div>
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">¥</div>
+      <div>
+        <div class="title">基金看板</div>
+        <div class="sub">场外净值为准 · 估值仅参考 · 1分钟自动刷新</div>
       </div>
     </div>
 
-    <div class="card">
-      <h3>新增持仓</h3>
-      <div class="inner">
+    <div class="status" id="status">JS：加载中…</div>
+  </header>
+
+  <main class="wrap">
+    <!-- 汇总 -->
+    <section class="card">
+      <div class="card-hd">
+        <div class="h1">总览</div>
+        <div class="hint" id="hint">持仓数：0</div>
+      </div>
+
+      <div class="metrics">
+        <div class="metric">
+          <div class="k">投入</div>
+          <div class="v" id="mInvest">--</div>
+        </div>
+        <div class="metric">
+          <div class="k">市值</div>
+          <div class="v" id="mValue">--</div>
+        </div>
+        <div class="metric">
+          <div class="k">盈亏</div>
+          <div class="v" id="mProfit">--</div>
+        </div>
+        <div class="metric">
+          <div class="k">收益率</div>
+          <div class="v" id="mRoi">--</div>
+        </div>
+      </div>
+
+      <div class="toolbar">
         <div class="row">
-          <label style="min-width:150px;">代码<input id="inCode" placeholder="例：161226 / 002207" /></label>
-          <label style="min-width:220px;">类型
-            <select id="inType">
-              <option value="fund">基金（场外净值）</option>
-              <option value="lof">LOF（净值买入 + 场内价卖出）</option>
-              <option value="market">场内（ETF/股票：纯场内价）</option>
-            </select>
-          </label>
-          <label style="min-width:170px;">买入日<input id="inBuyDate" type="date" /></label>
-        </div>
+          <label class="lb">自动刷新</label>
+          <select id="auto" class="sel">
+            <option value="0">关闭</option>
+            <option value="30">30 秒</option>
+            <option value="60" selected>60 秒</option>
+            <option value="120">120 秒</option>
+          </select>
 
-        <div class="row" style="margin-top:10px;">
-          <label style="min-width:170px;">投入（元）<input id="inAmount" inputmode="decimal" placeholder="例：1000" /></label>
-          <label style="min-width:220px;">成本口径
-            <select id="inCostMode">
-              <option value="auto">自动（确认日净值/买入日收盘）</option>
-              <option value="manual">手动填成本单价</option>
-            </select>
-          </label>
-          <label style="min-width:210px;">成本单价（可空）<input id="inCostPrice" inputmode="decimal" placeholder="不填则自动推算" /></label>
-        </div>
-
-        <div class="row" style="margin-top:12px;">
-          <button id="btnAdd">新增</button>
-          <button class="secondary" id="btnClear">清空输入</button>
-          <button class="secondary" id="btnWipe">清空持仓</button>
+          <button id="btnRefresh" class="btn">手动刷新</button>
+          <button id="btnWipe" class="btn danger">清空持仓</button>
         </div>
       </div>
-    </div>
-  </div>
+    </section>
 
-  <div class="card" style="margin-top:12px;">
-    <h3>持仓明细</h3>
-    <div class="inner">
-      <div class="muted" id="hint">--</div>
-      <div style="overflow:auto;margin-top:8px;">
-        <table>
+    <!-- 新增持仓 -->
+    <section class="card">
+      <div class="card-hd">
+        <div class="h1">新增持仓</div>
+        <div class="hint">金额模式：你只填“投入金额”，系统会自动换算份额</div>
+      </div>
+
+      <div class="form">
+        <div class="grid">
+          <div class="field">
+            <div class="lb">代码（6位）</div>
+            <input id="inCode" class="ipt" placeholder="例如：001467 / 161226" />
+          </div>
+
+          <div class="field">
+            <div class="lb">类型</div>
+            <select id="inType" class="sel">
+              <option value="fund" selected>基金（场外净值）</option>
+              <option value="lof">LOF（默认按场外净值）</option>
+              <option value="market">场内（按场内价）</option>
+            </select>
+          </div>
+
+          <div class="field" id="lofModeWrap" style="display:none">
+            <div class="lb">LOF计价方式</div>
+            <select id="inLofPriceMode" class="sel">
+              <option value="nav" selected>按场外净值算盈亏（推荐）</option>
+              <option value="mkt">按场内价算盈亏（含溢价）</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <div class="lb">买入日</div>
+            <input id="inBuyDate" class="ipt" type="date" />
+          </div>
+
+          <div class="field">
+            <div class="lb">投入金额（元）</div>
+            <input id="inAmount" class="ipt" type="number" min="0" step="0.01" placeholder="例如：100" />
+          </div>
+
+          <div class="field">
+            <div class="lb">成本单价（可选）</div>
+            <input id="inCostPrice" class="ipt" type="number" min="0" step="0.0001" placeholder="不填=自动（用确认净值/当前价）" />
+          </div>
+        </div>
+
+        <div class="row gap">
+          <button id="btnAdd" class="btn primary" type="button">新增</button>
+          <button id="btnClear" class="btn" type="button">清空输入</button>
+        </div>
+
+        <div class="note">
+          <div>⚠ 场外基金：成本默认用“确认日净值”；收益起算日=确认日后一个交易日（近似 T+1）。</div>
+          <div>⚠ “估值”是盘中推算，会偏；“净值”是官方结果（通常 T-1）。</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 7日曲线 -->
+    <section class="card">
+      <div class="card-hd">
+        <div class="h1">7日曲线</div>
+        <div class="hint">按买入日起，截取最近 7 个交易日做“累计收益”曲线</div>
+      </div>
+
+      <div class="chartbar">
+        <label class="lb">选择持仓</label>
+        <select id="selChart" class="sel"></select>
+        <div class="muted" id="chartMeta">--</div>
+      </div>
+
+      <div class="chartwrap">
+        <canvas id="chart" width="1100" height="320"></canvas>
+      </div>
+    </section>
+
+    <!-- 持仓表 -->
+    <section class="card">
+      <div class="card-hd">
+        <div class="h1">持仓明细</div>
+        <div class="hint">盈亏默认按“场外净值”为准（除非你选了场内/LOF按场内价）</div>
+      </div>
+
+      <div class="tablewrap">
+        <table class="tbl">
           <thead>
-          <tr>
-            <th>名称/代码</th><th>类型</th><th>买入日</th><th>确认/起息</th><th>投入</th><th>成本单价</th><th>份额</th>
-            <th>净值(日期)</th><th>场内价</th><th>溢价</th><th>市值</th><th>盈亏</th><th>收益率</th><th>操作</th>
-          </tr>
+            <tr>
+              <th>名称/代码</th>
+              <th>类型</th>
+              <th>买入日</th>
+              <th>确认/起息</th>
+              <th>投入</th>
+              <th>成本单价</th>
+              <th>份额</th>
+              <th>净值(日期)</th>
+              <th>估值(时间)</th>
+              <th>场内价</th>
+              <th>溢价</th>
+              <th>市值</th>
+              <th>盈亏</th>
+              <th>收益率</th>
+              <th>操作</th>
+            </tr>
           </thead>
-          <tbody id="tb">
-          <tr><td colspan="14" class="muted">暂无持仓。先新增一个 (ง •̀_•́)ง</td></tr>
-          </tbody>
+          <tbody id="tb"></tbody>
         </table>
       </div>
-    </div>
-  </div>
+    </section>
 
-  <div class="grid" style="margin-top:12px;">
-    <div class="card">
-      <h3>7日曲线（从买入日/确认逻辑计算）</h3>
-      <div class="inner">
-        <div class="row" style="align-items:center;justify-content:space-between;">
-          <label style="min-width:260px;">曲线对象
-            <select id="curveSel"></select>
-          </label>
-          <div class="pill" id="curveState">曲线状态：--</div>
-        </div>
-        <div class="chartwrap"><canvas id="cv" width="1000" height="360"></canvas></div>
+    <footer class="footer">
+      <div class="muted">
+        数据源：东方财富（净值/行情）+ 天天基金估值脚本（估值）。如遇接口波动属正常现象。
       </div>
-    </div>
-    <div class="card">
-      <h3>调试信息（把这里复制给我就能秒定位）</h3>
-      <div class="inner"><pre id="dbg">--</pre></div>
-    </div>
-  </div>
-</div>
-<script src="./app.js?v=20260202_2"></script>
+    </footer>
+  </main>
+
+  <!-- 只引用 app.js，不要再内嵌脚本 -->
+  <script src="./app.js?v=20260202_fix2"></script>
 </body>
 </html>
-
-
