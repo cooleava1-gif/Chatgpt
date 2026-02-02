@@ -1,29 +1,47 @@
-/* app.js — GitHub Pages 版基金看板（v8）
- * 关键修复：
- * 1) LOF 默认按场外净值算盈亏；可选按场内价算（LOF计价方式）
- * 2) 删除页面调试栏（仅保留状态提示）
- * 3) fund/lof 都显示盘中估值（估值=推算，净值=官方）
- * 4) 7日曲线恢复：按买入日起，截取最近 7 个交易日做“累计收益曲线”
- */
-
 (() => {
   "use strict";
 
-  const VERSION = "v8_2026-02-02";
+  const VERSION = "v9_2026-02-02_A";
   const UT = "fa5fd1943c7b386f172d6893dbfba10b";
-  const LS_KEY = "fund_holdings_app_v8";
+  const LS_KEY = "fund_holdings_app_v9";
+  const LS_MODE = "fund_view_mode_v9";
 
   const $ = (id) => document.getElementById(id);
 
-  // ---------- helpers ----------
-  const safeJSON = (o) => { try { return JSON.stringify(o); } catch { return String(o); } };
-  const todayStr = () => {
-    const d = new Date();
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const dd = String(d.getDate()).padStart(2, "0");
-    return `${y}-${m}-${dd}`;
-  };
+  // ===== 中国时区工具：解决你人在海外导致日期错乱 =====
+  function cnParts() {
+    const dtf = new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Asia/Shanghai",
+      year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", second: "2-digit",
+      weekday: "short", hour12: false
+    });
+    const parts = dtf.formatToParts(new Date());
+    const get = (t) => parts.find(p => p.type === t)?.value;
+    const y = get("year"), m = get("month"), d = get("day");
+    const hh = Number(get("hour")), mm = Number(get("minute"));
+    const wd = get("weekday"); // Mon/Tue/...
+    return { date: `${y}-${m}-${d}`, hh, mm, wd };
+  }
+
+  function marketStateCN() {
+    const p = cnParts();
+    const dow = p.wd; // Mon Tue Wed Thu Fri Sat Sun
+    const isWeekend = (dow === "Sat" || dow === "Sun");
+    const t = p.hh * 60 + p.mm;
+    const inAM = (t >= 9 * 60 + 30 && t <= 11 * 60 + 30);
+    const inPM = (t >= 13 * 60 && t <= 15 * 60);
+    const trading = !isWeekend && (inAM || inPM);
+    let state = "已收盘";
+    if (isWeekend) state = "休市";
+    else if (trading) state = "交易中";
+    else if (t < 9 * 60 + 30) state = "未开盘";
+    return { state, cnDate: p.date };
+  }
+
+  const todayStrCN = () => cnParts().date;
+
+  // ===== helpers =====
   const fmtMoney = (n) => Number.isFinite(n) ? Number(n).toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "--";
   const fmtPct = (n) => Number.isFinite(n) ? (n * 100).toFixed(2) + "%" : "--";
 
@@ -41,8 +59,10 @@
     return "场内";
   }
 
-  // ---------- storage ----------
+  // ===== storage =====
   let holdings = [];
+  let viewMode = localStorage.getItem(LS_MODE) || "intraday"; // intraday / settle
+
   function loadHoldings() {
     try { return JSON.parse(localStorage.getItem(LS_KEY) || "[]") || []; }
     catch { return []; }
@@ -54,7 +74,7 @@
     return Math.random().toString(16).slice(2) + Date.now().toString(16);
   }
 
-  // ---------- JSONP ----------
+  // ===== JSONP =====
   function jsonp(url, cbParam = "cb", timeoutMs = 12000) {
     return new Promise((resolve, reject) => {
       const cbName = "__jp_" + Math.random().toString(16).slice(2);
@@ -94,18 +114,17 @@
     });
   }
 
-  // ---------- Eastmoney quote + Tencent fallback ----------
+  // ===== Eastmoney quote + Tencent fallback =====
   function guessSecid(code) {
     const c = String(code);
-    if (/^16\d{4}$/.test(c)) return "0." + c; // 16xxxx LOF 通常深市
-    if (/^(5|6|9)\d{5}$/.test(c)) return "1." + c; // 沪市
-    return "0." + c; // 默认深市
+    if (/^16\d{4}$/.test(c)) return "0." + c;
+    if (/^(5|6|9)\d{5}$/.test(c)) return "1." + c;
+    return "0." + c;
   }
 
   function normalizePrice(raw) {
     let p = Number(raw);
     if (!Number.isFinite(p)) return NaN;
-    // 东财 f2 可能是 *1000
     if (p > 1000 && p < 100000) p /= 1000;
     else if (p >= 100000) p /= 100;
     return p;
@@ -191,7 +210,7 @@
     return await quoteTencent(code);
   }
 
-  // ---------- pingzhongdata NAV ----------
+  // ===== pingzhongdata NAV =====
   function msToDate(ms) {
     const d = new Date(ms);
     const y = d.getFullYear();
@@ -241,7 +260,7 @@
     });
   }
 
-  // ---------- fundgz estimate ----------
+  // ===== fundgz estimate =====
   function loadFundGz(code) {
     return new Promise((resolve) => {
       const c = String(code).trim();
@@ -288,7 +307,7 @@
     });
   }
 
-  // ---------- confirm / interest ----------
+  // ===== confirm / interest =====
   function calcConfirmInterest(navSeries, buyDate) {
     const idx = navSeries.findIndex(x => x.date >= buyDate);
     if (idx === -1) {
@@ -300,17 +319,12 @@
     return { confirmDate: confirm, interestDate: interest };
   }
 
-  // ---------- 7-day window from buyDate ----------
+  // ===== 7-day window =====
   function build7dWindow(navSeries, buyDate) {
     if (!Array.isArray(navSeries) || navSeries.length === 0) return null;
-
-    // 从 buyDate 起拿所有点
     const fromBuy = navSeries.filter(p => p.date >= buyDate);
     const src = fromBuy.length ? fromBuy : navSeries.slice(-7);
-
-    // 取“最近 7 个交易日”
     const win = src.slice(-7);
-
     if (win.length < 2) return null;
 
     const base = win[0].nav;
@@ -322,56 +336,47 @@
     return { points, baseDate: win[0].date, endDate: win[win.length - 1].date };
   }
 
-  // ---------- compute one ----------
+  // ===== compute one =====
   async function computeOne(h) {
     const code = String(h.code).trim();
     const type = h.type;
     const buyDate = h.buyDate;
     const invest = Number(h.amount);
+    const lofPriceMode = h.lofPriceMode || "nav"; // nav/mkt
 
     let costPrice = (h.costPrice !== "" && h.costPrice != null) ? Number(h.costPrice) : NaN;
-    const lofPriceMode = h.lofPriceMode || "nav"; // nav / mkt
 
     let navData = null;
     let gz = null;
     let quote = null;
     let err = "";
 
-    // fund/lof -> NAV
     if (type === "fund" || type === "lof") {
       try { navData = await loadNav(code); }
-      catch (e) { err += "净值获取失败; "; }
-    }
-
-    // fund/lof -> estimate
-    if (type === "fund" || type === "lof") {
+      catch { err += "净值获取失败; "; }
       try { gz = await loadFundGz(code); }
-      catch (e) { /* ignore */ }
+      catch {}
     }
 
-    // lof/market -> quote
     if (type === "lof" || type === "market") {
       try { quote = await loadQuote(code); }
-      catch (e) { err += "场内行情失败; "; }
+      catch { err += "场内行情失败; "; }
       if (!quote) err += "场内行情空; ";
     }
 
-    // confirm / interest
-    let confirmDate = "--", interestDate = "--";
     const series = navData?.navSeries || [];
+    let confirmDate = "--", interestDate = "--";
     if ((type === "fund" || type === "lof") && series.length) {
       const ci = calcConfirmInterest(series, buyDate);
       confirmDate = ci.confirmDate;
       interestDate = ci.interestDate;
     }
 
-    // auto costPrice:
+    // auto cost
     if (!Number.isFinite(costPrice) || costPrice <= 0) {
       if (type === "market") {
-        // 场内：没填成本单价时，只能用“当前价”做近似（会不准）
         costPrice = Number(quote?.price);
       } else {
-        // fund/lof：用确认日净值
         const navOnConfirm = series.find(x => x.date === confirmDate)?.nav;
         costPrice = Number(navOnConfirm) || Number(navData?.latestNav);
       }
@@ -380,6 +385,7 @@
     const shares = (Number.isFinite(costPrice) && costPrice > 0) ? (invest / costPrice) : NaN;
 
     const name = quote?.name || navData?.name || "--";
+
     const nav = navData?.latestNav;
     const navDate = navData?.latestNavDate;
     const navDailyPct = navData?.latestDailyPct;
@@ -389,30 +395,51 @@
     const estTime = gz?.estTime;
 
     const mkt = quote?.price;
+    const quoteSrc = quote?.src || "--";
     const premium = (type === "lof" && Number.isFinite(nav) && nav > 0 && Number.isFinite(mkt) && mkt > 0) ? (mkt / nav - 1) : NaN;
 
-    // Profit accrual: before interestDate -> 0
-    const t = todayStr();
-    const notAccruedYet = (interestDate !== "--" && t < interestDate);
+    const tCN = todayStrCN();
+    const notAccruedYet = (interestDate !== "--" && tCN < interestDate);
 
-    let value = invest, profit = 0;
+    // ----- settle (结算口径) -----
+    let settleValue = invest, settleProfit = 0;
     if (!notAccruedYet && Number.isFinite(shares)) {
       if (type === "fund") {
-        if (Number.isFinite(nav)) { value = shares * nav; profit = value - invest; }
+        if (Number.isFinite(nav)) { settleValue = shares * nav; settleProfit = settleValue - invest; }
       } else if (type === "lof") {
-        // 关键：默认按 NAV 算（你要的 126 左右）
         if (lofPriceMode === "mkt") {
-          if (Number.isFinite(mkt)) { value = shares * mkt; profit = value - invest; }
-          else if (Number.isFinite(nav)) { value = shares * nav; profit = value - invest; }
+          if (Number.isFinite(mkt)) { settleValue = shares * mkt; settleProfit = settleValue - invest; }
+          else if (Number.isFinite(nav)) { settleValue = shares * nav; settleProfit = settleValue - invest; }
         } else {
-          if (Number.isFinite(nav)) { value = shares * nav; profit = value - invest; }
+          if (Number.isFinite(nav)) { settleValue = shares * nav; settleProfit = settleValue - invest; }
         }
       } else if (type === "market") {
-        if (Number.isFinite(mkt)) { value = shares * mkt; profit = value - invest; }
+        if (Number.isFinite(mkt)) { settleValue = shares * mkt; settleProfit = settleValue - invest; }
       }
     }
 
-    // 7d window (NAV based, for fund/lof)
+    // ----- intraday (盘中口径) -----
+    // 盘中参考价：基金用估值；LOF优先用场内价（更适合你做盘中判断）；无场内则用估值/净值兜底
+    let intraPrice = NaN;
+    let intraSrc = "--";
+    if (type === "market") {
+      intraPrice = Number(mkt);
+      intraSrc = Number.isFinite(intraPrice) ? `场内价(${quoteSrc})` : "--";
+    } else if (type === "fund") {
+      intraPrice = Number.isFinite(estNav) ? estNav : nav;
+      intraSrc = Number.isFinite(estNav) ? `估值(${estTime})` : "净值(兜底)";
+    } else if (type === "lof") {
+      if (Number.isFinite(mkt)) { intraPrice = mkt; intraSrc = `场内价(${quoteSrc})`; }
+      else if (Number.isFinite(estNav)) { intraPrice = estNav; intraSrc = `估值(${estTime})`; }
+      else { intraPrice = nav; intraSrc = "净值(兜底)"; }
+    }
+
+    let intraValue = invest, intraProfit = 0;
+    if (!notAccruedYet && Number.isFinite(shares) && Number.isFinite(intraPrice) && intraPrice > 0) {
+      intraValue = shares * intraPrice;
+      intraProfit = intraValue - invest;
+    }
+
     const win7 = (type === "fund" || type === "lof") ? build7dWindow(series, buyDate) : null;
 
     return {
@@ -420,35 +447,34 @@
       name, buyDate,
       confirmDate, interestDate,
       invest, costPrice, shares,
+
       nav, navDate, navDailyPct,
       estNav, estPct, estTime,
-      mkt, premium,
-      value, profit, roi: invest > 0 ? profit / invest : 0,
+      mkt, premium, quoteSrc,
+
+      settleValue, settleProfit, settleRoi: invest > 0 ? settleProfit / invest : 0,
+      intraPrice, intraSrc, intraValue, intraProfit, intraRoi: invest > 0 ? intraProfit / invest : 0,
+
       win7,
       err: err.trim()
     };
   }
 
-  // ---------- render metrics ----------
+  // ===== render =====
   function renderMetrics(sumInvest, sumValue, sumProfit) {
-    if ($("mInvest")) $("mInvest").textContent = fmtMoney(sumInvest);
-    if ($("mValue")) $("mValue").textContent = fmtMoney(sumValue);
+    $("mInvest").textContent = fmtMoney(sumInvest);
+    $("mValue").textContent = fmtMoney(sumValue);
 
-    if ($("mProfit")) {
-      $("mProfit").textContent = fmtMoney(sumProfit);
-      $("mProfit").className = "v " + (sumProfit >= 0 ? "good" : "bad");
-    }
+    $("mProfit").textContent = fmtMoney(sumProfit);
+    $("mProfit").className = "v " + (sumProfit >= 0 ? "good" : "bad");
+
     const roi = sumInvest > 0 ? sumProfit / sumInvest : 0;
-    if ($("mRoi")) {
-      $("mRoi").textContent = fmtPct(roi);
-      $("mRoi").className = "v " + (roi >= 0 ? "good" : "bad");
-    }
+    $("mRoi").textContent = fmtPct(roi);
+    $("mRoi").className = "v " + (roi >= 0 ? "good" : "bad");
   }
 
-  // ---------- table ----------
   function renderTable(rows) {
     const tb = $("tb");
-    if (!tb) return;
     tb.innerHTML = "";
 
     if (!rows.length) {
@@ -457,8 +483,12 @@
     }
 
     rows.forEach((r) => {
-      const pCls = r.profit >= 0 ? "good" : "bad";
-      const rCls = r.roi >= 0 ? "good" : "bad";
+      const showValue = (viewMode === "intraday") ? r.intraValue : r.settleValue;
+      const showProfit = (viewMode === "intraday") ? r.intraProfit : r.settleProfit;
+      const showRoi = (viewMode === "intraday") ? r.intraRoi : r.settleRoi;
+
+      const pCls = showProfit >= 0 ? "good" : "bad";
+      const rCls = showRoi >= 0 ? "good" : "bad";
 
       const navLine = Number.isFinite(r.nav)
         ? `${r.nav.toFixed(4)}（${r.navDate}，日=${fmtPct(r.navDailyPct)}）`
@@ -473,7 +503,8 @@
 
       const nameHtml = `
         <div style="font-weight:900">${r.name}</div>
-        <div class="muted">${r.code}${r.type==="lof" ? `（按${r.lofPriceMode==="mkt"?"场内价":"净值"}算）` : ""}</div>
+        <div class="muted">${r.code}${r.type==="lof" ? `（结算按${r.lofPriceMode==="mkt"?"场内价":"净值"}）` : ""}</div>
+        <div class="muted">盘中参考：${Number.isFinite(r.intraPrice)? r.intraPrice.toFixed(4):"--"} · ${r.intraSrc}</div>
         ${r.err ? `<div class="muted">⚠ ${r.err}</div>` : ""}
       `;
 
@@ -490,25 +521,21 @@
         <td><div class="muted">${estLine}</div></td>
         <td class="muted">${mktTxt}</td>
         <td class="muted">${premTxt}</td>
-        <td>${fmtMoney(r.value)}</td>
-        <td class="${pCls}">${fmtMoney(r.profit)}</td>
-        <td class="${rCls}">${fmtPct(r.roi)}</td>
+        <td>${fmtMoney(showValue)}</td>
+        <td class="${pCls}">${fmtMoney(showProfit)}</td>
+        <td class="${rCls}">${fmtPct(showRoi)}</td>
         <td><button class="btn danger" data-act="del" data-id="${r.id}" type="button">删</button></td>
       `;
       tb.appendChild(tr);
     });
   }
 
-  // ---------- chart ----------
-  const chart = {
-    canvas: null,
-    ctx: null
-  };
+  // ===== chart (净值维度) =====
+  const chart = { canvas: null, ctx: null };
 
   function clearCanvas() {
     if (!chart.ctx || !chart.canvas) return;
-    const ctx = chart.ctx;
-    ctx.clearRect(0, 0, chart.canvas.width, chart.canvas.height);
+    chart.ctx.clearRect(0, 0, chart.canvas.width, chart.canvas.height);
   }
 
   function drawChart(win7, title) {
@@ -516,15 +543,12 @@
     const ctx = chart.ctx;
     const W = chart.canvas.width;
     const H = chart.canvas.height;
-
     clearCanvas();
 
-    // background grid
     ctx.save();
     ctx.globalAlpha = 0.5;
     ctx.strokeStyle = "rgba(255,255,255,.08)";
     ctx.lineWidth = 1;
-
     for (let i = 1; i <= 4; i++) {
       const y = (H / 5) * i;
       ctx.beginPath(); ctx.moveTo(12, y); ctx.lineTo(W - 12, y); ctx.stroke();
@@ -534,13 +558,11 @@
     if (!win7 || !win7.points || win7.points.length < 2) {
       ctx.fillStyle = "rgba(233,238,252,.65)";
       ctx.font = "14px system-ui";
-      ctx.fillText("暂无可绘制数据（可能净值未拉到或交易日不足）", 16, 38);
+      ctx.fillText("暂无可绘制数据（净值历史不足）", 16, 38);
       return;
     }
 
     const pts = win7.points;
-
-    // y range from cum returns
     let ymin = Infinity, ymax = -Infinity;
     pts.forEach(p => { ymin = Math.min(ymin, p.cum); ymax = Math.max(ymax, p.cum); });
     if (ymin === ymax) { ymin -= 0.01; ymax += 0.01; }
@@ -554,12 +576,10 @@
     const xAt = (i) => left + (plotW * i) / (pts.length - 1);
     const yAt = (v) => top + (1 - (v - ymin) / (ymax - ymin)) * plotH;
 
-    // title
     ctx.fillStyle = "rgba(233,238,252,.9)";
     ctx.font = "15px system-ui";
     ctx.fillText(title, 16, 20);
 
-    // y labels (3 ticks)
     ctx.fillStyle = "rgba(233,238,252,.65)";
     ctx.font = "12px system-ui";
     for (let i = 0; i <= 2; i++) {
@@ -568,7 +588,6 @@
       ctx.fillText((v * 100).toFixed(2) + "%", 10, y + 4);
     }
 
-    // line
     ctx.strokeStyle = "rgba(122,162,255,.9)";
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -580,17 +599,13 @@
     });
     ctx.stroke();
 
-    // points
     ctx.fillStyle = "rgba(58,242,178,.9)";
     pts.forEach((p, i) => {
       const x = xAt(i);
       const y = yAt(p.cum);
-      ctx.beginPath();
-      ctx.arc(x, y, 3, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.fill();
     });
 
-    // x labels (first / last)
     ctx.fillStyle = "rgba(233,238,252,.6)";
     ctx.font = "12px system-ui";
     ctx.fillText(pts[0].date, left, H - 12);
@@ -601,8 +616,6 @@
 
   function renderChartSelector(rows) {
     const sel = $("selChart");
-    if (!sel) return;
-
     sel.innerHTML = "";
     rows.forEach(r => {
       const opt = document.createElement("option");
@@ -610,43 +623,37 @@
       opt.textContent = `${r.code} ${r.name}（${typeLabel(r.type)}）`;
       sel.appendChild(opt);
     });
-
-    // default
     if (rows.length) sel.value = rows[0].id;
   }
 
   function updateChart(rows) {
     const sel = $("selChart");
     const meta = $("chartMeta");
-    if (!sel || !rows) return;
-
     const r = rows.find(x => x.id === sel.value) || rows[0];
     if (!r) return;
 
     if (meta) {
-      if (r.win7) meta.textContent = `窗口：${r.win7.baseDate} → ${r.win7.endDate}`;
-      else meta.textContent = "窗口：--";
+      meta.textContent = r.win7 ? `窗口：${r.win7.baseDate} → ${r.win7.endDate}` : "窗口：--";
     }
-
-    const title = `${r.code} ${r.name} · 7日累计收益（按净值）`;
-    drawChart(r.win7, title);
+    drawChart(r.win7, `${r.code} ${r.name} · 7日累计收益（净值维度）`);
   }
 
-  // ---------- refresh ----------
+  // ===== refresh =====
   let timer = null;
   let lastRows = [];
 
   async function refreshAll() {
-    setStatus(true, `JS：刷新中… ${VERSION}`);
+    const ms = marketStateCN();
+    setStatus(true, `刷新中… ${VERSION} · ${ms.state} · 口径=${viewMode === "intraday" ? "盘中" : "结算"}`);
 
     if (!holdings.length) {
-      $("hint") && ($("hint").textContent = "持仓数：0");
+      $("hint").textContent = "持仓数：0";
       renderMetrics(0, 0, 0);
       renderTable([]);
       lastRows = [];
-      const sel = $("selChart"); if (sel) sel.innerHTML = "";
+      $("selChart").innerHTML = "";
       drawChart(null, "");
-      setStatus(true, `JS：就绪（无持仓）${VERSION}`);
+      setStatus(true, `就绪 · ${ms.state} · 无持仓`);
       return;
     }
 
@@ -654,93 +661,100 @@
     for (const h of holdings) rows.push(await computeOne(h));
 
     let sumInvest = 0, sumValue = 0, sumProfit = 0;
-    rows.forEach(r => { sumInvest += r.invest; sumValue += r.value; sumProfit += r.profit; });
+    rows.forEach(r => {
+      sumInvest += r.invest;
+      const v = (viewMode === "intraday") ? r.intraValue : r.settleValue;
+      const p = (viewMode === "intraday") ? r.intraProfit : r.settleProfit;
+      sumValue += v;
+      sumProfit += p;
+    });
 
     renderMetrics(sumInvest, sumValue, sumProfit);
     renderTable(rows);
+    $("hint").textContent = `持仓数：${rows.length}`;
 
-    $("hint") && ($("hint").textContent = `持仓数：${rows.length}`);
-
-    // chart selector
     const sel = $("selChart");
-    const prev = sel?.value;
+    const prev = sel.value;
     renderChartSelector(rows);
-    if (sel && prev && rows.some(x => x.id === prev)) sel.value = prev;
+    if (prev && rows.some(x => x.id === prev)) sel.value = prev;
     updateChart(rows);
 
     lastRows = rows;
-    setStatus(true, `JS：就绪 ✅ ${VERSION}`);
+
+    // 汇总状态：把“为什么看起来像上周五”说清楚
+    const anyEst = rows.find(r => r.estTime && r.estTime !== "--");
+    const estInfo = anyEst ? `估值最后：${anyEst.estTime}` : "估值：--";
+    const navInfo = rows.find(r => r.navDate)?.navDate ? `净值日期：${rows.find(r=>r.navDate).navDate}` : "净值日期：--";
+
+    setStatus(true, `就绪 ✅ ${ms.state} · 口径=${viewMode === "intraday" ? "盘中" : "结算"} · ${estInfo} · ${navInfo}`);
   }
 
-  // ---------- events ----------
+  // ===== events =====
   function bindEvents() {
-    // show/hide LOF pricing mode
     function syncLofModeUI() {
-      const type = $("inType")?.value || "fund";
-      const wrap = $("lofModeWrap");
-      if (wrap) wrap.style.display = (type === "lof") ? "" : "none";
+      const type = $("inType").value || "fund";
+      $("lofModeWrap").style.display = (type === "lof") ? "" : "none";
     }
 
-    $("inType") && $("inType").addEventListener("change", syncLofModeUI);
+    $("inType").addEventListener("change", syncLofModeUI);
 
-    $("btnRefresh") && $("btnRefresh").addEventListener("click", refreshAll);
+    $("mode").value = viewMode;
+    $("mode").addEventListener("change", () => {
+      viewMode = $("mode").value;
+      localStorage.setItem(LS_MODE, viewMode);
+      refreshAll();
+    });
 
-    const auto = $("auto");
-    if (auto) {
-      auto.addEventListener("change", () => {
-        const s = Number(auto.value);
-        if (timer) clearInterval(timer);
-        timer = null;
-        if (s > 0) timer = setInterval(refreshAll, s * 1000);
-      });
-    }
+    $("btnRefresh").addEventListener("click", refreshAll);
 
-    $("btnClear") && $("btnClear").addEventListener("click", () => {
-      $("inCode") && ($("inCode").value = "");
-      $("inAmount") && ($("inAmount").value = "");
-      $("inCostPrice") && ($("inCostPrice").value = "");
-      $("inType") && ($("inType").value = "fund");
-      $("inLofPriceMode") && ($("inLofPriceMode").value = "nav");
-      $("inBuyDate") && ($("inBuyDate").value = todayStr());
+    $("auto").addEventListener("change", () => {
+      const s = Number($("auto").value);
+      if (timer) clearInterval(timer);
+      timer = null;
+      if (s > 0) timer = setInterval(refreshAll, s * 1000);
+    });
+
+    $("btnClear").addEventListener("click", () => {
+      $("inCode").value = "";
+      $("inAmount").value = "";
+      $("inCostPrice").value = "";
+      $("inType").value = "fund";
+      $("inLofPriceMode").value = "nav";
+      $("inBuyDate").value = todayStrCN();
       syncLofModeUI();
     });
 
-    $("btnWipe") && $("btnWipe").addEventListener("click", () => {
+    $("btnWipe").addEventListener("click", () => {
       if (!confirm("确定清空全部持仓？")) return;
       holdings = [];
       saveHoldings();
       refreshAll();
     });
 
-    $("btnAdd") && $("btnAdd").addEventListener("click", async () => {
-      const code = $("inCode")?.value?.trim() || "";
-      const type = $("inType")?.value || "fund";
-      const buyDate = $("inBuyDate")?.value || todayStr();
-      const amount = Number($("inAmount")?.value);
-
-      const costPriceRaw = ($("inCostPrice")?.value || "").trim();
-      const lofPriceMode = $("inLofPriceMode")?.value || "nav";
+    $("btnAdd").addEventListener("click", async () => {
+      const code = $("inCode").value.trim();
+      const type = $("inType").value || "fund";
+      const buyDate = $("inBuyDate").value || todayStrCN();
+      const amount = Number($("inAmount").value);
+      const costPriceRaw = ($("inCostPrice").value || "").trim();
+      const lofPriceMode = $("inLofPriceMode").value || "nav";
 
       if (!/^[0-9]{6}$/.test(code)) { alert("代码请输入6位数字"); return; }
       if (!(amount > 0)) { alert("投入金额必须 > 0"); return; }
 
-      const h = {
+      holdings.push({
         id: uid(),
-        code,
-        type,
-        lofPriceMode,
-        buyDate,
+        code, type, buyDate,
         amount,
-        costPrice: costPriceRaw
-      };
+        costPrice: costPriceRaw,
+        lofPriceMode
+      });
 
-      holdings.push(h);
       saveHoldings();
       await refreshAll();
     });
 
-    // delete
-    $("tb") && $("tb").addEventListener("click", (ev) => {
+    $("tb").addEventListener("click", (ev) => {
       const btn = ev.target.closest("button");
       if (!btn) return;
       if (btn.dataset.act === "del") {
@@ -751,31 +765,24 @@
       }
     });
 
-    // chart select
-    $("selChart") && $("selChart").addEventListener("change", () => {
-      updateChart(lastRows);
-    });
+    $("selChart").addEventListener("change", () => updateChart(lastRows));
 
     syncLofModeUI();
   }
 
-  // ---------- boot ----------
   function boot() {
     holdings = loadHoldings();
-    $("inBuyDate") && ($("inBuyDate").value = todayStr());
+    $("inBuyDate").value = todayStrCN();
 
     chart.canvas = $("chart");
     chart.ctx = chart.canvas ? chart.canvas.getContext("2d") : null;
 
     bindEvents();
 
-    // auto refresh default
-    if ($("auto")) {
-      $("auto").value = "60";
-      $("auto").dispatchEvent(new Event("change"));
-    }
+    $("auto").value = "60";
+    $("auto").dispatchEvent(new Event("change"));
 
-    setStatus(true, `JS：启动… ${VERSION}`);
+    setStatus(true, `启动… ${VERSION}`);
     refreshAll();
   }
 
